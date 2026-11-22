@@ -347,17 +347,6 @@
     </javac>
   </target>
 
-    <target name="build.nt" depends="log4j.jar" description="Build NTEventLogAppender.dll">
-         <mkdir dir="${dist.dir}/object"/>
-         <ant antfile="src/ntdll/build.xml">
-				<property name="target.dir" location="${dist.dir}/lib"/>
-				<property name="object.dir" location="${dist.dir}/object"/>
-				<property name="classes.dir" location="${javac.dest}" />
-				<property name="src.dir" location="src/ntdll" />
-                <property name="jni.include.dir" location="${java.home}/../include" />
-		  </ant>
-    </target>
-
   <!-- ================================================================= -->
   <!-- Remove all generated (compiled) class files.                      -->
   <!-- ================================================================= -->
@@ -604,7 +593,7 @@
  <!-- ================================================================= -->
  <!-- Build a complete distribution. Results go to ${dist.images}       -->
  <!-- ================================================================= -->
-  <target name="dist" depends="init, clean, javadoc, jar, site, build.nt">
+  <target name="dist" depends="init, clean, javadoc, jar, site">
 
     <delete verbose="true">
       <fileset dir=".">
