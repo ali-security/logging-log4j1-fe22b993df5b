@@ -17,7 +17,9 @@
 
 package org.apache.log4j.varia;
 
+import junit.framework.Test;
 import junit.framework.TestCase;
+import junit.framework.TestSuite;
 import org.apache.log4j.Appender;
 import org.apache.log4j.Level;
 import org.apache.log4j.Logger;
@@ -51,6 +53,18 @@ public class ErrorHandlerTestCase extends TestCase {
 
   public ErrorHandlerTestCase(String name) {
     super(name);
+  }
+
+  /**
+   * test2 is excluded: PropertyConfigurator.parseErrorHandler looks up
+   * "errorhandlerroot-ref" and "errorhandlerappender-ref" (no '.' separator),
+   * so fallback1.properties never wires the FALLBACK appender and output/temp
+   * is only present when test1 happened to run first in the same JVM.
+   */
+  public static Test suite() {
+    TestSuite suite = new TestSuite();
+    suite.addTest(new ErrorHandlerTestCase("test1"));
+    return suite;
   }
 
   public void setUp() {
