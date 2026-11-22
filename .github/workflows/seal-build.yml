@@ -1,0 +1,73 @@
+name: seal-build
+
+# log4j 1.2.17 ships no GitHub Actions CI. This workflow reproduces the
+# project's own Maven build (pom.xml, source/target 1.4), whose `test` phase
+# runs the Ant regression suite in tests/build.xml (target runAll) through
+# maven-antrun-plugin. Maven runs inside maven:3-jdk-7 (the newest JDK that
+# still compiles -source 1.4 with the pinned 2010-era plugins).
+
+on:
+  workflow_dispatch:
+    inputs:
+      test-filter:
+        description: "Space- or comma-separated tests/build.xml targets (e.g. Core,XMLLayout); empty runs the full suite"
+        required: false
+        default: ""
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      IMAGE: maven:3-jdk-7
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build and test (full suite)
+        if: ${{ inputs.test-filter == '' }}
+        run: |
+          set -o pipefail
+          docker run --rm -v "$PWD":/w -w /w \
+            -e MAVEN_OPTS="-Dhttps.protocols=TLSv1.2" \
+            "$IMAGE" \
+            mvn -B -V clean verify -Dmaven.site.skip=true 2>&1 | tee build.log
+
+      - name: Build and test (selected tests only)
+        if: ${{ inputs.test-filter != '' }}
+        run: |
+          set -o pipefail
+          TARGETS="$(echo '${{ inputs.test-filter }}' | tr ',' ' ')"
+          docker run --rm -v "$PWD":/w -w /w \
+            -e MAVEN_OPTS="-Dhttps.protocols=TLSv1.2" \
+            -e TARGETS="$TARGETS" \
+            "$IMAGE" \
+            bash -ec '
+              mvn -B -V clean test-compile -Dmaven.site.skip=true
+              curl -fsSL https://archive.apache.org/dist/ant/binaries/apache-ant-1.8.4-bin.tar.gz | tar -xz -C /tmp
+              M2=/root/.m2/repository
+              cd tests
+              /tmp/apache-ant-1.8.4/bin/ant -lib "$M2/junit/junit/3.8.1/junit-3.8.1.jar" \
+                -Dm2_repo="$M2" -Dlog4j.jar=/w/target/classes -Dproject.lib.home=/w/target \
+                $TARGETS
+            ' 2>&1 | tee build.log
+
+      - name: Test summary
+        if: ${{ always() }}
+        run: |
+          # Ant prints each suite's "Tests run:" line twice (printsummary and the
+          # plain formatter); count only the one following the "Testsuite:" header.
+          if [ -f build.log ]; then
+            awk '/\[junit\] Testsuite: / { s++; want = 1; next }
+                 want && /Tests run: [0-9]+, Failures: [0-9]+, Errors: [0-9]+/ {
+                   want = 0; gsub(",", ""); for (i = 1; i <= NF; i++) {
+                     if ($i == "run:") r += $(i+1); if ($i == "Failures:") f += $(i+1); if ($i == "Errors:") e += $(i+1) } }
+                 END { printf "JUnit totals across %d tests/build.xml suites: Tests run: %d, Failures: %d, Errors: %d, Passed: %d\n", s, r, f, e, r - f - e }' build.log
+          fi
+
+      - name: Upload jar
+        if: ${{ inputs.test-filter == '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: log4j-jar
+          path: target/log4j-1.2.17.jar
+          if-no-files-found: error
